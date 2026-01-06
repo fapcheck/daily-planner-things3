@@ -1,0 +1,13 @@
+project_id = "xspqoiauiwljmiwbszgj"
+
+[functions.daily-planner]
+verify_jwt = false
+
+[functions.breakdown-task]
+verify_jwt = false
+
+[functions.weekly-review]
+verify_jwt = false
+
+[functions.parse-task]
+verify_jwt = false
