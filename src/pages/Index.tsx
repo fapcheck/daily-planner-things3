@@ -375,6 +375,7 @@ const Index = () => {
           loading={dataLoading}
           onNavigateToFinance={handleFinanceClick}
           onClearLogbook={clearLogbook}
+          onMobileAddClick={() => setIsMobileAddOpen(true)}
         />
       )}
 
