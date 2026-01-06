@@ -5,6 +5,7 @@ import {
   OFFLINE_SYNC_MAX_RETRIES,
   OFFLINE_SYNC_BASE_DELAY_MS
 } from '@/lib/constants';
+import { encryptData, decryptData, isEncrypted } from '@/lib/encryption';
 
 // Helper for browser-compatible UUID generation
 const generateUUID = (): string => {
@@ -36,21 +37,32 @@ export function useOfflineSync() {
   const { toast } = useToast();
   const isProcessing = useRef(false);
 
-  const getQueue = useCallback((): QueuedOperation[] => {
+  const getQueue = useCallback(async (): Promise<QueuedOperation[]> => {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.OFFLINE_SYNC_QUEUE);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
+      if (!stored) return [];
+
+      // Check if data is encrypted and decrypt if needed
+      const decrypted = isEncrypted(stored) ? await decryptData(stored) : stored;
+      return JSON.parse(decrypted);
+    } catch (error) {
+      console.error('Failed to load offline queue:', error);
       return [];
     }
   }, []);
 
-  const saveQueue = useCallback((queue: QueuedOperation[]) => {
-    localStorage.setItem(STORAGE_KEYS.OFFLINE_SYNC_QUEUE, JSON.stringify(queue));
+  const saveQueue = useCallback(async (queue: QueuedOperation[]) => {
+    try {
+      const serialized = JSON.stringify(queue);
+      const encrypted = await encryptData(serialized);
+      localStorage.setItem(STORAGE_KEYS.OFFLINE_SYNC_QUEUE, encrypted);
+    } catch (error) {
+      console.error('Failed to save offline queue:', error);
+    }
   }, []);
 
-  const addToQueue = useCallback((operation: Omit<QueuedOperation, 'id' | 'timestamp'>) => {
-    const queue = getQueue();
+  const addToQueue = useCallback(async (operation: Omit<QueuedOperation, 'id' | 'timestamp'>) => {
+    const queue = await getQueue();
     const newOp: QueuedOperation = {
       ...operation,
       id: generateUUID(),
@@ -58,29 +70,30 @@ export function useOfflineSync() {
       retryCount: 0,
     };
     queue.push(newOp);
-    saveQueue(queue);
+    await saveQueue(queue);
     return newOp.id;
   }, [getQueue, saveQueue]);
 
-  const removeFromQueue = useCallback((id: string) => {
-    const queue = getQueue();
-    saveQueue(queue.filter(op => op.id !== id));
+  const removeFromQueue = useCallback(async (id: string) => {
+    const queue = await getQueue();
+    await saveQueue(queue.filter(op => op.id !== id));
   }, [getQueue, saveQueue]);
 
-  const updateOperationRetryCount = useCallback((id: string, retryCount: number) => {
-    const queue = getQueue();
+  const updateOperationRetryCount = useCallback(async (id: string, retryCount: number) => {
+    const queue = await getQueue();
     const updatedQueue = queue.map(op =>
       op.id === id ? { ...op, retryCount } : op
     );
-    saveQueue(updatedQueue);
+    await saveQueue(updatedQueue);
   }, [getQueue, saveQueue]);
 
   const clearQueue = useCallback(() => {
     localStorage.removeItem(STORAGE_KEYS.OFFLINE_SYNC_QUEUE);
   }, []);
 
-  const getPendingCount = useCallback(() => {
-    return getQueue().length;
+  const getPendingCount = useCallback(async () => {
+    const queue = await getQueue();
+    return queue.length;
   }, [getQueue]);
 
   const processQueue = useCallback(async (
@@ -97,7 +110,7 @@ export function useOfflineSync() {
     if (isProcessing.current || !navigator.onLine) return;
 
     // Clone queue at start to prevent concurrent modification issues
-    const queueSnapshot = [...getQueue()];
+    const queueSnapshot = [...await getQueue()];
     if (queueSnapshot.length === 0) return;
 
     isProcessing.current = true;
@@ -128,7 +141,7 @@ export function useOfflineSync() {
             await handlers.onSubtaskDelete(op.payload);
           }
         }
-        removeFromQueue(op.id);
+        await removeFromQueue(op.id);
         successCount++;
       } catch (error) {
         console.error('Failed to sync operation:', op, error);
@@ -136,12 +149,12 @@ export function useOfflineSync() {
         if (currentRetryCount >= OFFLINE_SYNC_MAX_RETRIES) {
           // Max retries exceeded - remove from queue and count as permanent failure
           console.error(`Operation ${op.id} exceeded max retries, removing from queue`);
-          removeFromQueue(op.id);
+          await removeFromQueue(op.id);
           permanentFailCount++;
         } else {
           // Increment retry count and apply exponential backoff delay
           const newRetryCount = currentRetryCount + 1;
-          updateOperationRetryCount(op.id, newRetryCount);
+          await updateOperationRetryCount(op.id, newRetryCount);
 
           // Exponential backoff: 1s, 2s, 4s
           const backoffDelay = OFFLINE_SYNC_BASE_DELAY_MS * Math.pow(2, currentRetryCount);

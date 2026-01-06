@@ -6,6 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { COMPLETION_DELAY_MS } from '@/lib/constants';
 import { logSupabaseError, formatErrorMessage } from '@/lib/supabase-utils';
+import { sanitizeTaskTitle, sanitizeTaskNotes, sanitizeName, sanitizeColor } from '@/lib/sanitize';
 
 // Helper for browser-compatible UUID generation
 const generateUUID = (): string => {
@@ -190,6 +191,13 @@ export function useCloudTasks() {
   const addTask = useCallback(async (title: string, view: ViewType, dueDate?: Date, projectId?: string, areaId?: string) => {
     if (!user) return;
 
+    // Sanitize input
+    const sanitizedTitle = sanitizeTaskTitle(title);
+    if (!sanitizedTitle) {
+      toast({ title: 'Invalid task title', variant: 'destructive' });
+      return;
+    }
+
     const when = view === 'inbox' ? null :
       view === 'today' ? 'today' :
         view === 'someday' ? 'someday' : null;
@@ -198,7 +206,7 @@ export function useCloudTasks() {
     const tempId = `temp-${generateUUID()}`;
     const tempTask: Task = {
       id: tempId,
-      title,
+      title: sanitizedTitle,
       completed: false,
       createdAt: new Date(),
       dueDate,
@@ -215,7 +223,7 @@ export function useCloudTasks() {
       addToQueue({
         type: 'task',
         action: 'create',
-        payload: { tempId, title, dueDate: dueDate?.toISOString(), projectId, areaId, when },
+        payload: { tempId, title: sanitizedTitle, dueDate: dueDate?.toISOString(), projectId, areaId, when },
       });
       toast({ title: 'Task saved offline', description: 'Will sync when back online' });
       return;
@@ -226,7 +234,7 @@ export function useCloudTasks() {
         .from('tasks')
         .insert({
           user_id: user.id,
-          title,
+          title: sanitizedTitle,
           due_date: dueDate?.toISOString(),
           project_id: projectId || null,
           area_id: areaId || null,
