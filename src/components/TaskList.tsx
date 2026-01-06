@@ -603,7 +603,7 @@ export function TaskList({
       {/* Draggable Add Button - only show on desktop and non-logbook views */}
       {view !== 'logbook' && (
         <DraggableAddButton
-          onAddTask={(title) => {
+          onAddTask={(title, _position) => {
             if (view === 'upcoming' && selectedCalendarDate) {
               onAddTask(title, selectedCalendarDate);
             } else {
