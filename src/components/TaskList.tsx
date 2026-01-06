@@ -74,6 +74,7 @@ interface TaskListProps {
   loading?: boolean;
   onClearLogbook?: () => void;
   onNavigateToFinance?: () => void;
+  onMobileAddClick?: () => void;
 }
 
 const viewConfig: Record<ViewType, {
@@ -142,6 +143,7 @@ export function TaskList({
   loading = false,
   onNavigateToFinance,
   onClearLogbook,
+  onMobileAddClick,
 }: TaskListProps) {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | undefined>(undefined);
@@ -392,10 +394,8 @@ export function TaskList({
             {/* Mobile: Clean minimal input */}
             <div className="md:hidden">
               <div
-                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-muted/50 border border-border/50 text-muted-foreground"
-                onClick={() => {
-                  // This will be handled by FAB on mobile
-                }}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-muted/50 border border-border/50 text-muted-foreground cursor-pointer active:bg-muted transition-colors"
+                onClick={() => onMobileAddClick?.()}
               >
                 <Plus className="w-5 h-5" />
                 <span className="text-[15px]">
