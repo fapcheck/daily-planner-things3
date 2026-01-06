@@ -10,8 +10,17 @@ interface OfflineIndicatorProps {
 export function OfflineIndicator({ onSyncRequested }: OfflineIndicatorProps) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showReconnected, setShowReconnected] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
   const { getPendingCount } = useOfflineSync();
-  const pendingCount = getPendingCount();
+
+  // Fetch pending count on mount and when online status changes
+  useEffect(() => {
+    const fetchPendingCount = async () => {
+      const count = await getPendingCount();
+      setPendingCount(count);
+    };
+    fetchPendingCount();
+  }, [getPendingCount, isOnline]);
 
   useEffect(() => {
     const handleOnline = () => {
