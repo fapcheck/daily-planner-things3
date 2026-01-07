@@ -47,3 +47,4 @@ export function ConfettiCelebration({ trigger }: ConfettiCelebrationProps) {
   return null;
 }
 
+

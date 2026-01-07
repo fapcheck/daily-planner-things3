@@ -228,3 +228,4 @@ When working with AI-related features:
 
 Thank you for contributing to Daily Planner! 🙏
 
+

@@ -7,10 +7,10 @@
   "license": "MIT",
   "private": true,
   "type": "module",
-  "homepage": "https://github.com/fapcheck/your-daily-planner",
+  "homepage": "https://github.com/fapcheck/daily-planner-things3",
   "repository": {
     "type": "git",
-    "url": "https://github.com/fapcheck/your-daily-planner.git"
+    "url": "https://github.com/fapcheck/daily-planner-things3.git"
   },
   "scripts": {
     "dev": "vite",
