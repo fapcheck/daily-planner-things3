@@ -33,7 +33,7 @@ export function useCloudTasks() {
   const [loading, setLoading] = useState(true);
   const [loadingTasks, setLoadingTasks] = useState<Set<string>>(new Set());
   const [recentlyCompletedTasks, setRecentlyCompletedTasks] = useState<Set<string>>(new Set());
-  const completionTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const completionTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Cleanup completion timers on unmount
   useEffect(() => {
@@ -149,6 +149,22 @@ export function useCloudTasks() {
         const tagIds = taskTagMap.get(t.id) || [];
         const taskTags = tagIds.map(id => tagMap.get(id)).filter(Boolean) as Tag[];
 
+        // Type-safe subtasks handling
+        const subtasks = Array.isArray(t.subtasks)
+          ? t.subtasks
+              .map((s: { id: string; title: string; completed: boolean; position: number }) => ({
+                id: s.id,
+                title: s.title,
+                completed: s.completed,
+              }))
+              .sort((a, b) => {
+                // Find positions from the original array
+                const subA = t.subtasks?.find(sub => sub.id === a.id);
+                const subB = t.subtasks?.find(sub => sub.id === b.id);
+                return (subA?.position ?? 0) - (subB?.position ?? 0);
+              })
+          : [];
+
         return {
           id: t.id,
           title: t.title,
@@ -163,13 +179,7 @@ export function useCloudTasks() {
           recurrenceType: t.recurrence_type as Task['recurrenceType'],
           recurrenceInterval: t.recurrence_interval || undefined,
           tags: taskTags,
-          subtasks: t.subtasks
-            ?.sort((a: any, b: any) => a.position - b.position)
-            .map((s: any) => ({
-              id: s.id,
-              title: s.title,
-              completed: s.completed,
-            })) || [],
+          subtasks,
         };
       }) || []);
     } catch (error: any) {

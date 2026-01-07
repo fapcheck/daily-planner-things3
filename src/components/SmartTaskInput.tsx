@@ -27,7 +27,7 @@ export function SmartTaskInput({ onAdd, placeholder = 'Новая задача..
   const [isParsing, setIsParsing] = useState(false);
   const [parsedPreview, setParsedPreview] = useState<ParsedTask | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const parseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const parseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
 
   const handleSpeechResult = useCallback((transcript: string, isFinal: boolean) => {

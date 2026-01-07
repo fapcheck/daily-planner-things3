@@ -77,7 +77,6 @@ ${JSON.stringify(pendingTasks, null, 2)}
       headers: {
         'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://lovable.dev',
       },
       body: JSON.stringify({
         model: 'deepseek/deepseek-chat-v3-0324',

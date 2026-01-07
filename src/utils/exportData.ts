@@ -18,7 +18,10 @@ function downloadFile(content: string, filename: string, mimeType: string) {
 function jsonToCsv(data: Record<string, any>[]): string {
   if (data.length === 0) return '';
   
-  const headers = Object.keys(data[0]);
+  const firstItem = data[0];
+  if (!firstItem) return '';
+
+  const headers = Object.keys(firstItem);
   const csvRows = [
     headers.join(','),
     ...data.map(row => 
@@ -77,7 +80,7 @@ export function exportTransactions(transactions: Transaction[], categories: Tran
     amount: t.amount,
     description: t.description || '',
     category: categoryMap.get(t.categoryId || '') || '',
-    date: t.date instanceof Date ? t.date.toISOString() : t.date,
+    date: t.date instanceof Date ? t.date.toISOString() : (t.date ? String(t.date) : ''),
   }));
 
   const timestamp = new Date().toISOString().split('T')[0];
@@ -97,9 +100,9 @@ export function exportDebts(debts: Debt[], format: ExportFormat) {
     originalAmount: d.originalAmount,
     remainingAmount: d.remainingAmount,
     description: d.description || '',
-    dueDate: d.dueDate instanceof Date ? d.dueDate.toISOString() : (d.dueDate || ''),
+    dueDate: d.dueDate instanceof Date ? d.dueDate.toISOString() : (d.dueDate ? String(d.dueDate) : ''),
     isSettled: d.isSettled,
-    createdAt: d.createdAt instanceof Date ? d.createdAt.toISOString() : d.createdAt,
+    createdAt: d.createdAt instanceof Date ? d.createdAt.toISOString() : (d.createdAt ? String(d.createdAt) : ''),
   }));
 
   const timestamp = new Date().toISOString().split('T')[0];

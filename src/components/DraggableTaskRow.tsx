@@ -7,15 +7,20 @@ import { SubtaskList } from './SubtaskList';
 import { TaskDatePicker } from './TaskDatePicker';
 import { TaskProjectPicker } from './TaskProjectPicker';
 import { TaskRecurrencePicker } from './TaskRecurrencePicker';
+import { ConfettiCelebration } from './ConfettiCelebration';
+import { TaskContextMenu } from './TaskContextMenu';
 import { cn } from '@/lib/utils';
 import { Trash2, GripVertical, ChevronRight, ListChecks, Repeat, Pencil, Calendar } from 'lucide-react';
 import { format, isToday, isTomorrow, isPast, startOfDay } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
 
 interface DraggableTaskRowProps {
   task: Task;
   onToggle: () => void;
   onDelete: () => void;
   onEdit: () => void;
+  onDuplicate: () => void;
+  onMoveToView: (view: 'inbox' | 'today' | 'someday') => void;
   onAddSubtask: (title: string) => void;
   onToggleSubtask: (subtaskId: string) => void;
   onDeleteSubtask: (subtaskId: string) => void;
@@ -33,6 +38,8 @@ export function DraggableTaskRow({
   onToggle,
   onDelete,
   onEdit,
+  onDuplicate,
+  onMoveToView,
   onAddSubtask,
   onToggleSubtask,
   onDeleteSubtask,
@@ -47,6 +54,7 @@ export function DraggableTaskRow({
   const [isExpanded, setIsExpanded] = useState(false);
   const [justCompleted, setJustCompleted] = useState(false);
   const prevCompletedRef = useRef(task.completed);
+  const { toast } = useToast();
 
   const {
     attributes,
@@ -87,25 +95,46 @@ export function DraggableTaskRow({
   const mobileDate = formatMobileDate(task.dueDate);
   const isOverdue = task.dueDate && isPast(startOfDay(task.dueDate)) && !isToday(task.dueDate) && !task.completed;
 
+  const handleCopyTitle = () => {
+    navigator.clipboard.writeText(task.title);
+    toast({
+      title: 'Copied to clipboard',
+      description: task.title,
+      duration: 2000,
+    });
+  };
+
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        'animate-fade-up',
-        isDragging && 'z-50'
-      )}
+    <TaskContextMenu
+      task={task}
+      onDuplicate={onDuplicate}
+      onMoveToView={onMoveToView}
+      onCopyTitle={handleCopyTitle}
+      onSetDueDate={onUpdateDueDate}
+      onToggleComplete={onToggle}
+      onDelete={onDelete}
+      onUpdateProject={onUpdateProject}
+      onUpdateRecurrence={onUpdateRecurrence}
     >
       <div
+        ref={setNodeRef}
+        style={style}
         className={cn(
-          'task-row group',
-          task.completed && 'completed',
-          justCompleted && 'just-completed',
-          isDragging && 'shadow-hover bg-card ring-2 ring-primary/20',
-          isExpanded && 'bg-muted/30'
+          'animate-fade-up',
+          isDragging && 'z-50'
         )}
-        onClick={() => setIsExpanded(!isExpanded)}
       >
+        <ConfettiCelebration trigger={justCompleted} />
+        <div
+          className={cn(
+            'task-row group',
+            task.completed && 'completed',
+            justCompleted && 'just-completed',
+            isDragging && 'shadow-hover bg-card ring-2 ring-primary/20',
+            isExpanded && 'bg-muted/30'
+          )}
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
         {/* Drag Handle - hidden on mobile */}
         <button
           {...attributes}
@@ -276,5 +305,6 @@ export function DraggableTaskRow({
         </div>
       )}
     </div>
+    </TaskContextMenu>
   );
 }

@@ -70,7 +70,10 @@ const ResetPassword = () => {
     // Validate password
     const result = passwordSchema.safeParse(password);
     if (!result.success) {
-      setErrors({ password: result.error.errors[0].message });
+      const firstError = result.error.errors[0];
+      if (firstError) {
+        setErrors({ password: firstError.message });
+      }
       return;
     }
 

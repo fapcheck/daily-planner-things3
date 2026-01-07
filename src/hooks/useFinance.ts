@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -120,24 +120,28 @@ export function useFinance() {
         createdAt: new Date(t.created_at),
       })) || []);
 
-      setDebts(debtsData?.map(d => ({
-        id: d.id,
-        personName: d.person_name,
-        type: d.type as DebtType,
-        originalAmount: Number(d.original_amount),
-        remainingAmount: Number(d.remaining_amount),
-        description: d.description || undefined,
-        dueDate: d.due_date ? new Date(d.due_date) : undefined,
-        isSettled: d.is_settled,
-        createdAt: new Date(d.created_at),
-        payments: (d.debt_payments as any[])?.map((p: any) => ({
+      setDebts(debtsData?.map(d => {
+        const payments = Array.isArray(d.debt_payments) ? d.debt_payments.map((p: { id: string; debt_id: string; amount: string | number; note?: string | null; paid_at: string }) => ({
           id: p.id,
           debtId: p.debt_id,
           amount: Number(p.amount),
           note: p.note || undefined,
           paidAt: new Date(p.paid_at),
-        })) || [],
-      })) || []);
+        })) : [];
+
+        return {
+          id: d.id,
+          personName: d.person_name,
+          type: d.type as DebtType,
+          originalAmount: Number(d.original_amount),
+          remainingAmount: Number(d.remaining_amount),
+          description: d.description || undefined,
+          dueDate: d.due_date ? new Date(d.due_date) : undefined,
+          isSettled: d.is_settled,
+          createdAt: new Date(d.created_at),
+          payments,
+        };
+      }) || []);
 
       setBudgets(budgetsData?.map(b => ({
         id: b.id,
@@ -899,9 +903,12 @@ export function useFinance() {
     }
   }, [user, recurringTransactions, toast]);
 
+  const hasProcessedRef = useRef(false);
+
   // Process due transactions on load
   useEffect(() => {
-    if (!loading && recurringTransactions.length > 0) {
+    if (!loading && recurringTransactions.length > 0 && !hasProcessedRef.current) {
+      hasProcessedRef.current = true;
       processDueRecurringTransactions();
     }
   }, [loading]); // Only run when loading changes to false

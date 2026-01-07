@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 import { ProjectProgress } from '@/components/ProjectProgress';
+import { ProjectProgressBar } from '@/components/ProjectProgressBar';
 
 const colorOptions = [
   'hsl(211, 100%, 50%)',  // blue
@@ -245,7 +246,7 @@ export function ProjectAreaManager({
 
             {/* Projects under this area */}
             {isExpanded && (
-              <div className="ml-4 space-y-0.5">
+              <div className="ml-4 space-y-1">
                 {areaProjects.map((project) => {
                   const projectTotal = projectTaskCounts[project.id] || 0;
                   const projectCompleted = projectCompletedCounts[project.id] || 0;
@@ -257,24 +258,38 @@ export function ProjectAreaManager({
                         selectedProjectId === project.id && 'active'
                       )}
                     >
-                      <ProjectProgress
-                        completed={projectCompleted}
-                        total={projectTotal + projectCompleted}
-                        color={project.color}
-                        size={18}
-                        strokeWidth={2.5}
-                        onClick={() => onSelectProject(project.id)}
-                      />
-                      <button 
-                        className="flex-1 text-left text-[14px] ml-2"
-                        onClick={() => onSelectProject(project.id)}
-                      >
-                        {project.name}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <ProjectProgress
+                          completed={projectCompleted}
+                          total={projectTotal + projectCompleted}
+                          color={project.color}
+                          size={18}
+                          strokeWidth={2.5}
+                          onClick={() => onSelectProject(project.id)}
+                        />
+                        <button 
+                          className="flex-1 text-left text-[14px]"
+                          onClick={() => onSelectProject(project.id)}
+                        >
+                          {project.name}
+                        </button>
+                        {projectTotal > 0 && (
+                          <span className="text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full shrink-0">
+                            {projectTotal}
+                          </span>
+                        )}
+                      </div>
+                      {/* Progress Bar */}
                       {projectTotal > 0 && (
-                        <span className="text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
-                          {projectTotal}
-                        </span>
+                        <div className="ml-8 mt-0.5">
+                          <ProjectProgressBar
+                            completed={projectCompleted}
+                            total={projectTotal + projectCompleted}
+                            color={project.color}
+                            showPercentage={false}
+                            size="sm"
+                          />
+                        </div>
                       )}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -330,24 +345,38 @@ export function ProjectAreaManager({
                   selectedProjectId === project.id && 'active'
                 )}
               >
-                <ProjectProgress
-                  completed={projectCompleted}
-                  total={projectTotal + projectCompleted}
-                  color={project.color}
-                  size={20}
-                  strokeWidth={3}
-                  onClick={() => onSelectProject(project.id)}
-                />
-                <button 
-                  className="flex-1 text-left text-[15px] ml-2"
-                  onClick={() => onSelectProject(project.id)}
-                >
-                  {project.name}
-                </button>
+                <div className="flex items-center gap-2">
+                  <ProjectProgress
+                    completed={projectCompleted}
+                    total={projectTotal + projectCompleted}
+                    color={project.color}
+                    size={20}
+                    strokeWidth={3}
+                    onClick={() => onSelectProject(project.id)}
+                  />
+                  <button 
+                    className="flex-1 text-left text-[15px]"
+                    onClick={() => onSelectProject(project.id)}
+                  >
+                    {project.name}
+                  </button>
+                  {projectTotal > 0 && (
+                    <span className="text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full shrink-0">
+                      {projectTotal}
+                    </span>
+                  )}
+                </div>
+                {/* Progress Bar */}
                 {projectTotal > 0 && (
-                  <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                    {projectTotal}
-                  </span>
+                  <div className="ml-7 mt-0.5">
+                    <ProjectProgressBar
+                      completed={projectCompleted}
+                      total={projectTotal + projectCompleted}
+                      color={project.color}
+                      showPercentage={false}
+                      size="sm"
+                    />
+                  </div>
                 )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

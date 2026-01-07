@@ -16,7 +16,10 @@ import { DraggableAddButton } from './DraggableAddButton';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { DateRangePicker, DateRange } from './DateRangePicker';
 import { LogbookChart } from './LogbookChart';
+import { EmptyState } from './EmptyState';
+import { BatchActionBar } from './BatchActionBar';
 import { Button } from './ui/button';
+import { useToast } from '@/hooks/use-toast';
 import {
   Inbox,
   Star,
@@ -28,7 +31,8 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   Plus,
-  Trash2
+  Trash2,
+  Layers
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -152,6 +156,11 @@ export function TaskList({
   const [logbookDateRange, setLogbookDateRange] = useState<DateRange>({ from: undefined, to: undefined });
   const taskListRef = useRef<HTMLDivElement>(null);
 
+  // Batch selection state
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+  const { toast } = useToast();
+
   const handleToggleTagFilter = (tagId: string) => {
     setSelectedTagIds(prev =>
       prev.includes(tagId)
@@ -162,6 +171,88 @@ export function TaskList({
 
   const handleClearTagFilter = () => {
     setSelectedTagIds([]);
+  };
+
+  // Batch selection handlers
+  const toggleBatchMode = () => {
+    setIsBatchMode(!isBatchMode);
+    setSelectedTaskIds(new Set());
+  };
+
+  const toggleTaskSelection = (taskId: string) => {
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
+      }
+      return next;
+    });
+  };
+
+  const clearTaskSelection = () => {
+    setSelectedTaskIds(new Set());
+  };
+
+  const handleDuplicateTask = (task: Task) => {
+    // Create a duplicate with similar properties but new ID
+    const duplicateTitle = `${task.title} (copy)`;
+    const whenMap: Record<string, ViewType | undefined> = {
+      today: 'today',
+      evening: 'today',
+      someday: 'someday',
+    };
+    const targetView = whenMap[task.when!] || 'inbox';
+
+    onAddTask(duplicateTitle, task.dueDate);
+    toast({
+      title: 'Task duplicated',
+      description: duplicateTitle,
+      duration: 2000,
+    });
+  };
+
+  const handleMoveToView = (taskId: string, targetView: 'inbox' | 'today' | 'someday') => {
+    onMoveTask(taskId, targetView);
+    toast({
+      title: 'Task moved',
+      description: `Moved to ${targetView}`,
+      duration: 2000,
+    });
+  };
+
+  const handleBatchComplete = () => {
+    selectedTaskIds.forEach((id) => onToggleTask(id));
+    setSelectedTaskIds(new Set());
+    setIsBatchMode(false);
+    toast({
+      title: 'Tasks completed',
+      description: `${selectedTaskIds.size} task${selectedTaskIds.size > 1 ? 's' : ''} marked complete`,
+      duration: 2000,
+    });
+  };
+
+  const handleBatchDelete = () => {
+    selectedTaskIds.forEach((id) => onDeleteTask(id));
+    setSelectedTaskIds(new Set());
+    setIsBatchMode(false);
+    toast({
+      title: 'Tasks deleted',
+      description: `${selectedTaskIds.size} task${selectedTaskIds.size > 1 ? 's' : ''} deleted`,
+      duration: 2000,
+    });
+  };
+
+  const handleBatchMove = (targetView: 'inbox' | 'today' | 'someday') => {
+    selectedTaskIds.forEach((id) => onMoveTask(id, targetView));
+    setSelectedTaskIds(new Set());
+    setIsBatchMode(false);
+    toast({
+      title: 'Tasks moved',
+      description: `${selectedTaskIds.size} task${selectedTaskIds.size > 1 ? 's' : ''} moved to ${targetView}`,
+      duration: 2000,
+    });
   };
 
   // Filter tasks by selected calendar date, tags, and logbook date range
@@ -313,6 +404,21 @@ export function TaskList({
             <h1 className="text-xl md:text-2xl font-semibold text-foreground tracking-tight">
               {headerConfig.title}
             </h1>
+            {view !== 'logbook' && (
+              <Button
+                variant={isBatchMode ? 'default' : 'ghost'}
+                size="sm"
+                onClick={toggleBatchMode}
+                className={cn(
+                  'ml-auto gap-2',
+                  isBatchMode ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
+                )}
+                title={isBatchMode ? 'Exit batch mode' : 'Enter batch mode'}
+              >
+                <Layers className="w-4 h-4" />
+                <span className="hidden sm:inline">Batch</span>
+              </Button>
+            )}
             {view === 'logbook' && tasks.length > 0 && onClearLogbook && (
               <Button
                 variant="ghost"
@@ -469,49 +575,58 @@ export function TaskList({
             {loading ? (
               <TaskRowSkeleton count={5} />
             ) : filteredTasks.length === 0 && filteredDebts.length === 0 ? (
-              <div className="text-center py-16 animate-fade-up" style={{ animationDelay: '100ms' }}>
-                <Icon className={cn('w-12 h-12 mx-auto mb-4 opacity-20', config.color)} />
-                <p className="text-muted-foreground">
-                  {view === 'logbook'
-                    ? 'No completed tasks yet'
-                    : selectedCalendarDate && view === 'upcoming'
-                      ? 'Nothing due on this date'
-                      : `Your ${config.title.toLowerCase()} is clear`
-                  }
-                </p>
-                {selectedCalendarDate && view === 'upcoming' ? (
-                  <button
-                    onClick={() => setSelectedCalendarDate(undefined)}
-                    className="text-sm text-primary hover:underline mt-2"
-                  >
-                    Show all upcoming
-                  </button>
-                ) : (
-                  <p className="text-sm text-muted-foreground/60 mt-1">
-                    {config.description}
-                  </p>
-                )}
-              </div>
+              <EmptyState
+                view={selectedProject || selectedArea ? 'inbox' : view}
+                onAction={onMobileAddClick}
+                hasDateSelected={!!selectedCalendarDate}
+                className="animate-fade-up"
+                style={{ animationDelay: '100ms' } as any}
+              />
             ) : (
               <SortableContext items={filteredTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
                 {filteredTasks.map((task) => (
-                  <div key={task.id} data-task-row>
-                    <DraggableTaskRow
-                      task={task}
-                      onToggle={() => onToggleTask(task.id)}
-                      onDelete={() => onDeleteTask(task.id)}
-                      onEdit={() => onEditTask(task)}
-                      onAddSubtask={(title) => onAddSubtask(task.id, title)}
-                      onToggleSubtask={(subtaskId) => onToggleSubtask(task.id, subtaskId)}
-                      onDeleteSubtask={(subtaskId) => onDeleteSubtask(task.id, subtaskId)}
-                      onReorderSubtasks={onReorderSubtasks ? (activeId, overId) => onReorderSubtasks(task.id, activeId, overId) : undefined}
-                      onUpdateDueDate={(date) => onUpdateTaskDueDate(task.id, date)}
-                      onUpdateProject={(projectId, areaId) => onUpdateTaskProject(task.id, projectId, areaId)}
-                      onUpdateRecurrence={(type, interval) => onUpdateTaskRecurrence(task.id, type, interval)}
-                      isLoading={isTaskLoading?.(task.id)}
-                      projects={projects}
-                      areas={areas}
-                    />
+                  <div key={task.id} className={cn('flex items-center gap-2', isBatchMode && 'py-1')}>
+                    {/* Batch selection checkbox - shows only in batch mode */}
+                    {isBatchMode && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleTaskSelection(task.id);
+                        }}
+                        className="w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-150 hover:scale-110"
+                        style={{
+                          backgroundColor: selectedTaskIds.has(task.id) ? 'var(--primary)' : 'transparent',
+                          borderColor: selectedTaskIds.has(task.id) ? 'var(--primary)' : 'hsl(var(--muted-foreground))',
+                        }}
+                        title={selectedTaskIds.has(task.id) ? 'Deselect task' : 'Select task'}
+                      >
+                        {selectedTaskIds.has(task.id) && (
+                          <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                            <path d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                    )}
+                    <div className="flex-1">
+                      <DraggableTaskRow
+                        task={task}
+                        onToggle={() => onToggleTask(task.id)}
+                        onDelete={() => onDeleteTask(task.id)}
+                        onEdit={() => onEditTask(task)}
+                        onDuplicate={() => handleDuplicateTask(task)}
+                        onMoveToView={(targetView) => handleMoveToView(task.id, targetView)}
+                        onAddSubtask={(title) => onAddSubtask(task.id, title)}
+                        onToggleSubtask={(subtaskId) => onToggleSubtask(task.id, subtaskId)}
+                        onDeleteSubtask={(subtaskId) => onDeleteSubtask(task.id, subtaskId)}
+                        onReorderSubtasks={onReorderSubtasks ? (activeId, overId) => onReorderSubtasks(task.id, activeId, overId) : undefined}
+                        onUpdateDueDate={(date) => onUpdateTaskDueDate(task.id, date)}
+                        onUpdateProject={(projectId, areaId) => onUpdateTaskProject(task.id, projectId, areaId)}
+                        onUpdateRecurrence={(type, interval) => onUpdateTaskRecurrence(task.id, type, interval)}
+                        isLoading={isTaskLoading?.(task.id)}
+                        projects={projects}
+                        areas={areas}
+                      />
+                    </div>
                   </div>
                 ))}
               </SortableContext>
@@ -601,17 +716,24 @@ export function TaskList({
       </div>
 
       {/* Draggable Add Button - only show on desktop and non-logbook views */}
-      {view !== 'logbook' && (
+      {view !== 'logbook' && !isBatchMode && (
         <DraggableAddButton
           onAddTask={(title, _position) => {
-            if (view === 'upcoming' && selectedCalendarDate) {
-              onAddTask(title, selectedCalendarDate);
-            } else {
-              onAddTask(title);
-            }
+            onAddTask(title, view === 'upcoming' && selectedCalendarDate ? selectedCalendarDate : undefined);
           }}
           taskListRef={taskListRef}
           disabled={loading}
+        />
+      )}
+
+      {/* Batch Action Bar */}
+      {isBatchMode && selectedTaskIds.size > 0 && (
+        <BatchActionBar
+          selectedCount={selectedTaskIds.size}
+          onCompleteSelected={handleBatchComplete}
+          onDeleteSelected={handleBatchDelete}
+          onMoveSelected={handleBatchMove}
+          onClearSelection={clearTaskSelection}
         />
       )}
 

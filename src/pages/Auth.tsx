@@ -45,7 +45,10 @@ const Auth = () => {
     if (mode === 'forgot') {
       const emailResult = z.string().email('Please enter a valid email address').safeParse(email);
       if (!emailResult.success) {
-        setErrors({ email: emailResult.error.errors[0].message });
+        const firstError = emailResult.error.errors[0];
+        if (firstError) {
+          setErrors({ email: firstError.message });
+        }
         return;
       }
     } else {

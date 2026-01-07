@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Task } from '@/types/task';
 import { TaskCheckbox } from './TaskCheckbox';
 import { TagBadge } from './TagBadge';
+import { ConfettiCelebration } from './ConfettiCelebration';
 import { cn } from '@/lib/utils';
 import { Trash2 } from 'lucide-react';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
@@ -35,6 +36,7 @@ export function TaskRow({ task, onToggle, onDelete, style }: TaskRowProps) {
 
   return (
     <>
+      <ConfettiCelebration trigger={justCompleted} />
       <div 
         className={cn(
           'task-row group', 
