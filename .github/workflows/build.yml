@@ -48,6 +48,7 @@ jobs:
   build-tauri-windows:
     runs-on: windows-latest
     needs: build
+    timeout-minutes: 60
     
     steps:
     - name: Checkout code
@@ -72,6 +73,7 @@ jobs:
         VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || '' }}
 
     - name: Upload Windows installer
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: windows-installer
@@ -79,10 +81,12 @@ jobs:
           src-tauri/target/release/bundle/nsis/*.exe
           src-tauri/target/release/bundle/msi/*.msi
         retention-days: 30
+        if-no-files-found: ignore
 
   build-tauri-macos:
     runs-on: macos-latest
     needs: build
+    timeout-minutes: 60
     
     steps:
     - name: Checkout code
@@ -107,10 +111,12 @@ jobs:
         VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || '' }}
 
     - name: Upload macOS app
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: macos-app
         path: src-tauri/target/release/bundle/dmg/*.dmg
         retention-days: 30
+        if-no-files-found: ignore
 
 
