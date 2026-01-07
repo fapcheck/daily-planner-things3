@@ -23,6 +23,11 @@ export const CURRENCY_CONFIG = {
   maximumFractionDigits: 0,
 };
 
+// Helper functions for precise currency calculations
+// Convert rubles to kopecks (smallest unit) to avoid floating point errors
+const toKopecks = (rubles: number): number => Math.round(rubles * 100);
+const toRubles = (kopecks: number): number => kopecks / 100;
+
 // Helper to format currency consistently
 export const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat(CURRENCY_CONFIG.locale, {
@@ -356,7 +361,7 @@ export function useFinance() {
     }
   }, [user, toast]);
 
-  const addDebtPayment = useCallback(async (debtId: string, amount: number, note?: string) => {
+  const addDebtPayment = useCallback(async (debtId: string, amount: number, note?: string, createTransaction = false) => {
     const debt = debts.find(d => d.id === debtId);
     if (!debt) return;
 
@@ -388,13 +393,55 @@ export function useFinance() {
 
       if (error) throw error;
 
-      const newRemaining = Math.max(0, debt.remainingAmount - amount);
+      // Use kopecks for precise calculation to avoid floating point errors
+      const remainingKopecks = toKopecks(debt.remainingAmount);
+      const paymentKopecks = toKopecks(amount);
+      const newRemainingKopecks = Math.max(0, remainingKopecks - paymentKopecks);
+      const newRemaining = toRubles(newRemainingKopecks);
       const isSettled = newRemaining === 0;
 
       await supabase
         .from('debts')
         .update({ remaining_amount: newRemaining, is_settled: isSettled })
         .eq('id', debtId);
+
+      // Optionally create a transaction to update balance
+      if (createTransaction && user) {
+        const transactionType: TransactionType = debt.type === 'owed_to_me' ? 'income' : 'expense';
+        const description = debt.type === 'owed_to_me'
+          ? `Debt payment from ${debt.personName}`
+          : `Debt payment to ${debt.personName}`;
+
+        try {
+          const { data: transData, error: transError } = await supabase
+            .from('transactions')
+            .insert({
+              user_id: user.id,
+              type: transactionType,
+              amount,
+              description,
+              date: new Date().toISOString(),
+            })
+            .select()
+            .single();
+
+          if (transError) throw transError;
+
+          // Update local transactions state
+          setTransactions(prev => [{
+            id: transData.id,
+            categoryId: transData.category_id || undefined,
+            type: transData.type as TransactionType,
+            amount: Number(transData.amount),
+            description: transData.description || undefined,
+            date: new Date(transData.date),
+            createdAt: new Date(transData.created_at),
+          }, ...prev]);
+        } catch (transError) {
+          console.error('Error creating transaction for debt payment:', transError);
+          // Continue - debt payment is still recorded even if transaction fails
+        }
+      }
 
       setDebts(prev => prev.map(d =>
         d.id === debtId
@@ -418,7 +465,7 @@ export function useFinance() {
       console.error('Error adding payment:', error);
       toast({ title: 'Error recording payment', description: error.message, variant: 'destructive' });
     }
-  }, [debts, toast]);
+  }, [debts, toast, user, setTransactions]);
 
   const updateDebt = useCallback(async (
     id: string,

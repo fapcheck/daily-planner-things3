@@ -9,7 +9,7 @@ import { TaskProjectPicker } from './TaskProjectPicker';
 import { TaskRecurrencePicker } from './TaskRecurrencePicker';
 import { cn } from '@/lib/utils';
 import { Trash2, GripVertical, ChevronRight, ListChecks, Repeat, Pencil, Calendar } from 'lucide-react';
-import { format, isToday, isTomorrow, isPast } from 'date-fns';
+import { format, isToday, isTomorrow, isPast, startOfDay } from 'date-fns';
 
 interface DraggableTaskRowProps {
   task: Task;
@@ -28,9 +28,9 @@ interface DraggableTaskRowProps {
   areas: Area[];
 }
 
-export function DraggableTaskRow({ 
-  task, 
-  onToggle, 
+export function DraggableTaskRow({
+  task,
+  onToggle,
   onDelete,
   onEdit,
   onAddSubtask,
@@ -47,7 +47,7 @@ export function DraggableTaskRow({
   const [isExpanded, setIsExpanded] = useState(false);
   const [justCompleted, setJustCompleted] = useState(false);
   const prevCompletedRef = useRef(task.completed);
-  
+
   const {
     attributes,
     listeners,
@@ -85,7 +85,7 @@ export function DraggableTaskRow({
   };
 
   const mobileDate = formatMobileDate(task.dueDate);
-  const isOverdue = task.dueDate && isPast(task.dueDate) && !isToday(task.dueDate) && !task.completed;
+  const isOverdue = task.dueDate && isPast(startOfDay(task.dueDate)) && !isToday(task.dueDate) && !task.completed;
 
   return (
     <div
@@ -120,17 +120,17 @@ export function DraggableTaskRow({
         </button>
 
         {/* Expand indicator */}
-        <ChevronRight 
+        <ChevronRight
           className={cn(
             'w-4 h-4 text-muted-foreground/40 transition-transform duration-200 -ml-1 mr-1 shrink-0',
             isExpanded && 'rotate-90'
-          )} 
+          )}
         />
 
         <div onClick={(e) => e.stopPropagation()} className="touch-manipulation">
           <TaskCheckbox checked={task.completed} onChange={onToggle} isLoading={isLoading} />
         </div>
-        
+
         <div className="flex-1 min-w-0">
           <p className={cn(
             'task-title text-[15px] leading-relaxed transition-colors duration-200',
@@ -185,11 +185,11 @@ export function DraggableTaskRow({
             const item = project || area;
             if (!item) return null;
             return (
-              <span 
+              <span
                 className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground max-w-[80px]"
               >
-                <span 
-                  className="w-2 h-2 rounded-full shrink-0" 
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
                   style={{ backgroundColor: item.color }}
                 />
                 <span className="truncate">{item.name}</span>
@@ -199,8 +199,8 @@ export function DraggableTaskRow({
           {mobileDate && (
             <span className={cn(
               'flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full',
-              isOverdue 
-                ? 'bg-destructive/10 text-destructive' 
+              isOverdue
+                ? 'bg-destructive/10 text-destructive'
                 : 'bg-muted text-muted-foreground'
             )}>
               <Calendar className="w-2.5 h-2.5" />

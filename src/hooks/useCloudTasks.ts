@@ -7,6 +7,7 @@ import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { COMPLETION_DELAY_MS } from '@/lib/constants';
 import { logSupabaseError, formatErrorMessage } from '@/lib/supabase-utils';
 import { sanitizeTaskTitle, sanitizeTaskNotes, sanitizeName, sanitizeColor } from '@/lib/sanitize';
+import { addDays, addWeeks, addMonths } from 'date-fns';
 
 // Helper for browser-compatible UUID generation
 const generateUUID = (): string => {
@@ -372,6 +373,35 @@ export function useCloudTasks() {
 
         if (createError) throw createError;
 
+        // Copy subtasks from original task to new instance
+        let copiedSubtasks: Subtask[] = [];
+        if (task.subtasks && task.subtasks.length > 0) {
+          try {
+            const subtaskInserts = task.subtasks.map((s, index) => ({
+              task_id: newTaskData.id,
+              title: s.title,
+              completed: false, // Reset completion for new instance
+              position: index,
+            }));
+
+            const { data: subtasksData, error: subtasksError } = await supabase
+              .from('subtasks')
+              .insert(subtaskInserts)
+              .select();
+
+            if (subtasksError) throw subtasksError;
+
+            copiedSubtasks = subtasksData?.map(s => ({
+              id: s.id,
+              title: s.title,
+              completed: s.completed,
+            })) || [];
+          } catch (subtaskError) {
+            console.error('Error copying subtasks to recurring task:', subtaskError);
+            // Continue without subtasks rather than failing the entire operation
+          }
+        }
+
         const newTask: Task = {
           id: newTaskData.id,
           title: newTaskData.title,
@@ -384,7 +414,7 @@ export function useCloudTasks() {
           when: newTaskData.when as Task['when'],
           recurrenceType: newTaskData.recurrence_type as Task['recurrenceType'],
           recurrenceInterval: newTaskData.recurrence_interval || undefined,
-          subtasks: [],
+          subtasks: copiedSubtasks,
         };
 
         setTasks(prev => [newTask, ...prev]);
@@ -410,24 +440,24 @@ export function useCloudTasks() {
   // Helper function to calculate next due date for recurring tasks
   const calculateNextDueDate = (currentDueDate: Date | undefined, type: string, interval: number): Date => {
     const baseDate = currentDueDate || new Date();
-    const nextDate = new Date(baseDate);
 
     switch (type) {
       case 'daily':
-        nextDate.setDate(nextDate.getDate() + interval);
-        break;
+        return addDays(baseDate, interval);
       case 'weekly':
-        nextDate.setDate(nextDate.getDate() + (7 * interval));
-        break;
+        return addWeeks(baseDate, interval);
       case 'monthly':
-        nextDate.setMonth(nextDate.getMonth() + interval);
-        break;
+        return addMonths(baseDate, interval);
+      default:
+        return baseDate;
     }
-
-    return nextDate;
   };
 
   const deleteTask = useCallback(async (id: string) => {
+    // Store task before deleting for potential restoration
+    const taskToDelete = tasks.find(t => t.id === id);
+    if (!taskToDelete) return;
+
     // Clear any pending completion timer for this task to prevent memory leak
     const existingTimer = completionTimersRef.current.get(id);
     if (existingTimer) {
@@ -463,41 +493,61 @@ export function useCloudTasks() {
       if (error) throw error;
     } catch (error: any) {
       console.error('Error deleting task:', error);
+      // Restore the deleted task on error
+      setTasks(prev => [...prev, taskToDelete]);
       toast({
         title: 'Error deleting task',
         description: error.message,
         variant: 'destructive',
       });
-      // Re-fetch to restore state
-      fetchData();
     }
-  }, [toast, addToQueue, fetchData]);
+  }, [tasks, toast, addToQueue]);
 
   const moveTask = useCallback(async (taskId: string, targetView: ViewType) => {
-    try {
-      const when = targetView === 'inbox' ? null :
-        targetView === 'today' ? 'today' :
-          targetView === 'someday' ? 'someday' : null;
+    const when = targetView === 'inbox' ? null :
+      targetView === 'today' ? 'today' :
+        targetView === 'someday' ? 'someday' : null;
 
+    // Optimistic update
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, when: when as Task['when'] } : t
+    ));
+
+    // If offline, queue the operation
+    if (!navigator.onLine) {
+      addToQueue({
+        type: 'task',
+        action: 'update',
+        payload: { id: taskId, when },
+      });
+      toast({ title: 'Task moved offline', description: 'Will sync when back online' });
+      return;
+    }
+
+    try {
       const { error } = await supabase
         .from('tasks')
         .update({ when })
         .eq('id', taskId);
 
       if (error) throw error;
-
-      setTasks(prev => prev.map(t =>
-        t.id === taskId ? { ...t, when: when as Task['when'] } : t
-      ));
     } catch (error: any) {
       console.error('Error moving task:', error);
+      // Revert optimistic update
+      setTasks(prev => prev.map(t => {
+        if (t.id === taskId) {
+          // Try to restore original when value (we don't have it, so refetch might be better)
+          return t;
+        }
+        return t;
+      }));
       toast({
         title: 'Error moving task',
         description: error.message,
         variant: 'destructive',
       });
     }
-  }, [toast]);
+  }, [toast, addToQueue]);
 
   const updateTaskDueDate = useCallback(async (id: string, dueDate: Date | undefined) => {
     try {

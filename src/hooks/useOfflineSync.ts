@@ -109,87 +109,113 @@ export function useOfflineSync() {
   ) => {
     if (isProcessing.current || !navigator.onLine) return;
 
-    // Clone queue at start to prevent concurrent modification issues
-    const queueSnapshot = [...await getQueue()];
-    if (queueSnapshot.length === 0) return;
-
     isProcessing.current = true;
-    let successCount = 0;
-    let failCount = 0;
-    let permanentFailCount = 0;
 
-    for (const op of queueSnapshot) {
-      const currentRetryCount = op.retryCount || 0;
+    try {
+      // Read queue once at the start
+      const queueSnapshot = [...await getQueue()];
+      if (queueSnapshot.length === 0) {
+        isProcessing.current = false;
+        return;
+      }
 
-      try {
-        if (op.type === 'task') {
-          if (op.action === 'create' && handlers.onTaskCreate) {
-            await handlers.onTaskCreate(op.payload);
-          } else if (op.action === 'update' && handlers.onTaskUpdate) {
-            await handlers.onTaskUpdate(op.payload);
-          } else if (op.action === 'delete' && handlers.onTaskDelete) {
-            await handlers.onTaskDelete(op.payload);
-          } else if (op.action === 'toggle' && handlers.onTaskToggle) {
-            await handlers.onTaskToggle(op.payload);
+      let successCount = 0;
+      let failCount = 0;
+      let permanentFailCount = 0;
+
+      // Track which operations to remove
+      const opsToRemove: string[] = [];
+      const opsToRetry: { id: string; retryCount: number }[] = [];
+
+      for (const op of queueSnapshot) {
+        const currentRetryCount = op.retryCount || 0;
+
+        try {
+          if (op.type === 'task') {
+            if (op.action === 'create' && handlers.onTaskCreate) {
+              await handlers.onTaskCreate(op.payload);
+            } else if (op.action === 'update' && handlers.onTaskUpdate) {
+              await handlers.onTaskUpdate(op.payload);
+            } else if (op.action === 'delete' && handlers.onTaskDelete) {
+              await handlers.onTaskDelete(op.payload);
+            } else if (op.action === 'toggle' && handlers.onTaskToggle) {
+              await handlers.onTaskToggle(op.payload);
+            }
+          } else if (op.type === 'subtask') {
+            if (op.action === 'create' && handlers.onSubtaskCreate) {
+              await handlers.onSubtaskCreate(op.payload);
+            } else if (op.action === 'toggle' && handlers.onSubtaskToggle) {
+              await handlers.onSubtaskToggle(op.payload);
+            } else if (op.action === 'delete' && handlers.onSubtaskDelete) {
+              await handlers.onSubtaskDelete(op.payload);
+            }
           }
-        } else if (op.type === 'subtask') {
-          if (op.action === 'create' && handlers.onSubtaskCreate) {
-            await handlers.onSubtaskCreate(op.payload);
-          } else if (op.action === 'toggle' && handlers.onSubtaskToggle) {
-            await handlers.onSubtaskToggle(op.payload);
-          } else if (op.action === 'delete' && handlers.onSubtaskDelete) {
-            await handlers.onSubtaskDelete(op.payload);
+
+          // Mark for removal
+          opsToRemove.push(op.id);
+          successCount++;
+        } catch (error) {
+          console.error('Failed to sync operation:', op, error);
+
+          if (currentRetryCount >= OFFLINE_SYNC_MAX_RETRIES) {
+            // Max retries exceeded - remove from queue
+            console.error(`Operation ${op.id} exceeded max retries, removing from queue`);
+            opsToRemove.push(op.id);
+            permanentFailCount++;
+          } else {
+            // Mark for retry with incremented count
+            const newRetryCount = currentRetryCount + 1;
+            opsToRetry.push({ id: op.id, retryCount: newRetryCount });
+
+            // Exponential backoff: 1s, 2s, 4s
+            const backoffDelay = OFFLINE_SYNC_BASE_DELAY_MS * Math.pow(2, currentRetryCount);
+            await delay(backoffDelay);
+
+            failCount++;
           }
-        }
-        await removeFromQueue(op.id);
-        successCount++;
-      } catch (error) {
-        console.error('Failed to sync operation:', op, error);
-
-        if (currentRetryCount >= OFFLINE_SYNC_MAX_RETRIES) {
-          // Max retries exceeded - remove from queue and count as permanent failure
-          console.error(`Operation ${op.id} exceeded max retries, removing from queue`);
-          await removeFromQueue(op.id);
-          permanentFailCount++;
-        } else {
-          // Increment retry count and apply exponential backoff delay
-          const newRetryCount = currentRetryCount + 1;
-          await updateOperationRetryCount(op.id, newRetryCount);
-
-          // Exponential backoff: 1s, 2s, 4s
-          const backoffDelay = OFFLINE_SYNC_BASE_DELAY_MS * Math.pow(2, currentRetryCount);
-          await delay(backoffDelay);
-
-          failCount++;
         }
       }
-    }
 
-    isProcessing.current = false;
+      // Atomically update the queue - read once, write once
+      if (opsToRemove.length > 0 || opsToRetry.length > 0) {
+        const currentQueue = await getQueue();
+        let updatedQueue = currentQueue.filter(op => !opsToRemove.includes(op.id));
 
-    if (successCount > 0) {
-      toast({
-        title: 'Synced offline changes',
-        description: `${successCount} change${successCount > 1 ? 's' : ''} synced successfully`,
-      });
-    }
+        // Update retry counts
+        updatedQueue = updatedQueue.map(op => {
+          const retryUpdate = opsToRetry.find(r => r.id === op.id);
+          return retryUpdate ? { ...op, retryCount: retryUpdate.retryCount } : op;
+        });
 
-    if (failCount > 0) {
-      toast({
-        title: 'Some changes failed to sync',
-        description: `${failCount} change${failCount > 1 ? 's' : ''} will retry later`,
-        variant: 'destructive',
-      });
-    }
+        await saveQueue(updatedQueue);
+      }
 
-    if (permanentFailCount > 0) {
-      toast({
-        title: 'Changes could not be synced',
-        description: `${permanentFailCount} change${permanentFailCount > 1 ? 's' : ''} failed after multiple retries`,
-        variant: 'destructive',
-      });
+      if (successCount > 0) {
+        toast({
+          title: 'Synced offline changes',
+          description: `${successCount} change${successCount > 1 ? 's' : ''} synced successfully`,
+        });
+      }
+
+      if (failCount > 0) {
+        toast({
+          title: 'Some changes failed to sync',
+          description: `${failCount} change${failCount > 1 ? 's' : ''} will retry later`,
+          variant: 'destructive',
+        });
+      }
+
+      if (permanentFailCount > 0) {
+        toast({
+          title: 'Changes could not be synced',
+          description: `${permanentFailCount} change${permanentFailCount > 1 ? 's' : ''} failed after multiple retries`,
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      isProcessing.current = false;
     }
-  }, [getQueue, removeFromQueue, updateOperationRetryCount, toast]);
+  }, [getQueue, saveQueue, toast]);
 
   return {
     addToQueue,
